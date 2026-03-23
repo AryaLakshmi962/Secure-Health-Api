@@ -1,0 +1,75 @@
+version: '3.8'
+
+services:
+
+  mysql:
+    image: mysql:8.0
+    container_name: patient-mysql
+    environment:
+      MYSQL_ROOT_PASSWORD: rootpass
+      MYSQL_DATABASE: patientdb
+      MYSQL_USER: patientuser
+      MYSQL_PASSWORD: patientpass
+    ports:
+      - "3306:3306"
+    volumes:
+      - mysql_data:/var/lib/mysql
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  keycloak:
+    image: quay.io/keycloak/keycloak:24.0.1
+    container_name: patient-keycloak
+    environment:
+      KEYCLOAK_ADMIN: admin
+      KEYCLOAK_ADMIN_PASSWORD: admin
+    command: start-dev --import-realm
+    volumes:
+      - ./keycloak:/opt/keycloak/data/import
+    ports:
+      - "8080:8080"
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:8080/health/ready || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 10
+
+  flask-api:
+    build: .
+    container_name: patient-api
+    environment:
+      DB_HOST: mysql
+      DB_PORT: 3306
+      DB_NAME: patientdb
+      DB_USER: patientuser
+      DB_PASSWORD: patientpass
+      KEYCLOAK_URL: http://keycloak:8080
+      KEYCLOAK_REALM: patient-realm
+      KEYCLOAK_CLIENT_ID: patient-client
+      AES_SECRET_KEY: MySuperSecretKey1234567890123456
+    ports:
+      - "8443:8443"
+    depends_on:
+      mysql:
+        condition: service_healthy
+      keycloak:
+        condition: service_started
+
+  jenkins:
+    image: jenkins/jenkins:lts
+    container_name: patient-jenkins
+    ports:
+      - "8081:8080"
+      - "50000:50000"
+    volumes:
+      - jenkins_data:/var/jenkins_home
+      - ./jenkins/Jenkinsfile:/var/jenkins_home/Jenkinsfile
+    environment:
+      JAVA_OPTS: "-Djenkins.install.runSetupWizard=false"
+
+volumes:
+  mysql_data:
+  jenkins_data:

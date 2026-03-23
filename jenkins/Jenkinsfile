@@ -1,0 +1,139 @@
+pipeline {
+    agent any
+
+    environment {
+        IMAGE_NAME     = "secure-patient-api"
+        CONTAINER_NAME = "patient-api"
+        API_PORT       = "8443"
+        DB_HOST        = "patient-mysql"
+        DB_NAME        = "patientdb"
+        DB_USER        = "patientuser"
+        DB_PASSWORD    = "patientpass"
+        AES_SECRET_KEY = "MySuperSecretKey1234567890123456"
+        KEYCLOAK_URL   = "http://patient-keycloak:8080"
+        KEYCLOAK_REALM = "patient-realm"
+        KEYCLOAK_CLIENT_ID = "patient-client"
+    }
+
+    stages {
+
+        // ─────────────────────────────────────────
+        stage('1 — Checkout') {
+            steps {
+                echo '📥 Checking out source code...'
+                checkout scm
+            }
+        }
+
+        // ─────────────────────────────────────────
+        stage('2 — Install Dependencies') {
+            steps {
+                echo '📦 Installing Python dependencies...'
+                sh '''
+                    python3 -m pip install --upgrade pip
+                    pip3 install -r requirements.txt
+                '''
+            }
+        }
+
+        // ─────────────────────────────────────────
+        stage('3 — Run Unit Tests') {
+            steps {
+                echo '🧪 Running pytest unit tests...'
+                sh '''
+                    cd tests
+                    python3 -m pytest test_api.py -v \
+                        --tb=short \
+                        --junit-xml=test-results.xml
+                '''
+            }
+            post {
+                always {
+                    junit 'tests/test-results.xml'
+                }
+                success {
+                    echo '✅ All tests passed!'
+                }
+                failure {
+                    echo '❌ Tests failed — stopping pipeline.'
+                }
+            }
+        }
+
+        // ─────────────────────────────────────────
+        stage('4 — Build Docker Image') {
+            steps {
+                echo '🐳 Building Docker image...'
+                sh '''
+                    docker build -t ${IMAGE_NAME}:latest .
+                    echo "✅ Image built: ${IMAGE_NAME}:latest"
+                '''
+            }
+        }
+
+        // ─────────────────────────────────────────
+        stage('5 — Stop Old Container') {
+            steps {
+                echo '🛑 Stopping old container if running...'
+                sh '''
+                    docker stop ${CONTAINER_NAME} || true
+                    docker rm   ${CONTAINER_NAME} || true
+                    echo "✅ Old container removed."
+                '''
+            }
+        }
+
+        // ─────────────────────────────────────────
+        stage('6 — Deploy New Container') {
+            steps {
+                echo '🚀 Deploying new container...'
+                sh '''
+                    docker run -d \
+                        --name ${CONTAINER_NAME} \
+                        --network secure-patient-records_default \
+                        -p ${API_PORT}:${API_PORT} \
+                        -e DB_HOST=${DB_HOST} \
+                        -e DB_NAME=${DB_NAME} \
+                        -e DB_USER=${DB_USER} \
+                        -e DB_PASSWORD=${DB_PASSWORD} \
+                        -e AES_SECRET_KEY=${AES_SECRET_KEY} \
+                        -e KEYCLOAK_URL=${KEYCLOAK_URL} \
+                        -e KEYCLOAK_REALM=${KEYCLOAK_REALM} \
+                        -e KEYCLOAK_CLIENT_ID=${KEYCLOAK_CLIENT_ID} \
+                        ${IMAGE_NAME}:latest
+                    echo "✅ Container deployed on port ${API_PORT}"
+                '''
+            }
+        }
+
+        // ─────────────────────────────────────────
+        stage('7 — Health Check') {
+            steps {
+                echo '❤️  Verifying API is alive...'
+                sh '''
+                    sleep 5
+                    curl -k https://localhost:${API_PORT}/health \
+                        || echo "⚠️ Health check failed — check logs"
+                '''
+            }
+        }
+    }
+
+    // ─────────────────────────────────────────────
+    post {
+        success {
+            echo '''
+            ╔══════════════════════════════════════╗
+            ║  ✅ PIPELINE COMPLETE — API DEPLOYED  ║
+            ╚══════════════════════════════════════╝
+            '''
+        }
+        failure {
+            echo '''
+            ╔══════════════════════════════════════╗
+            ║  ❌ PIPELINE FAILED — CHECK LOGS      ║
+            ╚══════════════════════════════════════╝
+            '''
+        }
+    }
+}

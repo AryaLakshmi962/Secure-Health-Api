@@ -1,0 +1,75 @@
+{
+  "realm": "patient-realm",
+  "enabled": true,
+  "sslRequired": "none",
+  "registrationAllowed": false,
+  "loginWithEmailAllowed": true,
+  "duplicateEmailsAllowed": false,
+  "resetPasswordAllowed": false,
+  "editUsernameAllowed": false,
+  "bruteForceProtected": true,
+
+  "roles": {
+    "realm": [
+      {
+        "name": "viewer",
+        "description": "Can read patient records only"
+      },
+      {
+        "name": "editor",
+        "description": "Can read and create patient records"
+      }
+    ]
+  },
+
+  "clients": [
+    {
+      "clientId": "patient-client",
+      "enabled": true,
+      "publicClient": false,
+      "secret": "patient-client-secret",
+      "directAccessGrantsEnabled": true,
+      "serviceAccountsEnabled": true,
+      "authorizationServicesEnabled": false,
+      "redirectUris": ["*"],
+      "webOrigins": ["*"],
+      "protocol": "openid-connect",
+      "attributes": {
+        "access.token.lifespan": "3600"
+      }
+    }
+  ],
+
+  "users": [
+    {
+      "username": "lab_viewer",
+      "enabled": true,
+      "email": "viewer@hospital.com",
+      "firstName": "Lab",
+      "lastName": "Viewer",
+      "credentials": [
+        {
+          "type": "password",
+          "value": "viewer123",
+          "temporary": false
+        }
+      ],
+      "realmRoles": ["viewer"]
+    },
+    {
+      "username": "lab_editor",
+      "enabled": true,
+      "email": "editor@hospital.com",
+      "firstName": "Lab",
+      "lastName": "Editor",
+      "credentials": [
+        {
+          "type": "password",
+          "value": "editor123",
+          "temporary": false
+        }
+      ],
+      "realmRoles": ["editor"]
+    }
+  ]
+}
